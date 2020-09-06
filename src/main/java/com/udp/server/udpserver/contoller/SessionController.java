@@ -1,27 +1,25 @@
 package com.udp.server.udpserver.contoller;
 
 import com.udp.server.udpserver.dto.ClientInfoDto;
-import com.udp.server.udpserver.server.UdpServer;
+import com.udp.server.udpserver.dto.GameDto;
+import com.udp.server.udpserver.service.UdpOperationService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController(value = "/session")
 public class SessionController {
 
     @Autowired
-    private UdpServer udpServer;
+    private UdpOperationService udpServer;
 
 
     @RequestMapping(value = "/join", method = RequestMethod.POST)
-    public void joinClient(@RequestBody ClientInfoDto clientInfoDto) throws Exception {
-        udpServer.joinNewClient(clientInfoDto);
+    public GameDto joinClient(@RequestBody ClientInfoDto clientInfoDto) throws Exception {
+        return udpServer.joinClient(clientInfoDto);
     }
 
-    @RequestMapping(value = "/exit", method = RequestMethod.POST)
-    public void exitClient(@RequestBody ClientInfoDto clientInfoDto) throws Exception {
-        udpServer.exitClient(clientInfoDto);
+    @RequestMapping(value = "/{gameId}/exit", method = RequestMethod.POST)
+    public void exitClient(@RequestBody ClientInfoDto clientInfoDto, @RequestParam String gameId) throws Exception {
+        udpServer.removeClient(clientInfoDto, gameId);
     }
 }
