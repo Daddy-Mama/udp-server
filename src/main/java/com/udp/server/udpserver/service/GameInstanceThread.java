@@ -1,12 +1,10 @@
 package com.udp.server.udpserver.service;
 
 
-import com.esotericsoftware.kryonet.Connection;
-import com.esotericsoftware.kryonet.Listener;
-import com.esotericsoftware.kryonet.Server;
 import com.udp.server.udpserver.dto.ClientInfoDto;
 import com.udp.server.udpserver.exceptions.GameSessionNotContainsUserException;
 import com.udp.server.udpserver.exceptions.UserAlreadyInGameSessionException;
+import com.udp.server.udpserver.model.ClientSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -14,6 +12,7 @@ import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.udp.server.udpserver.MessagesEnum.PLAYER_JOINED;
 import static com.udp.server.udpserver.MessagesEnum.PLAYER_LEFT;
@@ -21,50 +20,48 @@ import static com.udp.server.udpserver.MessagesEnum.PLAYER_LEFT;
 @Slf4j
 public class GameInstanceThread extends Thread {
 
+    private final AtomicBoolean running = new AtomicBoolean(false);
     private boolean started = false;
     protected DatagramSocket socket;
-    //Todo: annotation not works because of non-spring bean class
-    @Value(value = "${server.broadcast.port:11234}")
-    private Integer broadcastPort = 11234;
-    @Value(value = "${server.receive.port:11235}")
-    private Integer receivePort = 11235;
+
+    private Integer port = 11234;
 
 
-    private List<ClientInfoDto> players = new ArrayList<>();
+    private List<ClientSession> players = new ArrayList<>();
 
     public GameInstanceThread(String name) throws IOException {
         super(name);
         //Todo check here port usability
-        socket = new DatagramSocket(receivePort);
-
-//        Server server = new Server();
-//        server.start();
-//        server.bind(8081, receivePort);
-//
-//        server.addListener(createListener());
+        socket = new DatagramSocket(port);
+        running.set(true);
     }
 
     public void run() {
-        while (true) {
+        while (running.get()) {
             try {
+                log.info("Server session STARTED");
+
                 String messageToSend = "service response";
 
                 //read message from player
                 DatagramPacket packet = readMessageFromPlayer();
 
                 log.info("received: " + new String(packet.getData()));
-//                if (!allowBroadCasting(packet.getAddress().getHostAddress())) {
-//                    continue;
-//                }
+                log.info("sender info: " + packet.getAddress().getHostAddress() + ":" + packet.getPort());
+                if (!allowBroadCasting(packet.getAddress().getHostAddress())) {
+                    continue;
+                }
 
                 // send response
-                sendMessageToAllPlayers(messageToSend);
+                sendMessageToAllPlayers(messageToSend, packet.getAddress().getHostAddress());
                 // sleep for a while
 
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
+        log.info("Socket closed");
+        socket.close();
     }
 
 
@@ -84,21 +81,34 @@ public class GameInstanceThread extends Thread {
         return receivePacket;
     }
 
-    private void sendMessageToAllPlayers(String messageToSend) throws IOException {
-        byte[] buf = messageToSend.getBytes();
+    private void sendMessageToAllPlayers(String messageToSend, String sender) throws IOException {
+        byte[] toSendData = messageToSend.getBytes();
 
-        InetAddress group = InetAddress.getByName("230.199.234.255");
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, group, broadcastPort);
-        socket.send(packet);
+        players.stream()
+                .filter(player -> !player.getIp().equals(sender))
+                .forEach(player -> {
+                    try {
+                        DatagramPacket sendPacket =
+                                new DatagramPacket(toSendData,
+                                        toSendData.length,
+                                        InetAddress.getByName(player.getIp()),
+                                        player.getPort());
+
+                        socket.send(sendPacket);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+
     }
 
-    public synchronized void joinNewPlayer(ClientInfoDto clientInfoDto) throws UserAlreadyInGameSessionException, IOException {
-        if (!players.contains(clientInfoDto)) {
+    public synchronized void joinNewPlayer(ClientSession clientSession) throws UserAlreadyInGameSessionException, IOException {
+        if (!players.contains(clientSession)) {
             //Session is full
             if (!isAvailable()) return;
 
-            informGroupNewPlayerJoinedGame(clientInfoDto.getUsername());
-            players.add(clientInfoDto);
+            informGroupNewPlayerJoinedGame(clientSession.getUsername());
+            players.add(clientSession);
 
             //start game if it's full
             if (players.size() == 10) {
@@ -107,7 +117,7 @@ public class GameInstanceThread extends Thread {
 
             return;
         }
-        throw new UserAlreadyInGameSessionException(clientInfoDto.getUsername());
+        throw new UserAlreadyInGameSessionException(clientSession.getUsername());
     }
 
     public boolean isAvailable() {
@@ -115,20 +125,20 @@ public class GameInstanceThread extends Thread {
     }
 
     private void informGroupNewPlayerJoinedGame(String username) throws IOException {
-        sendMessageToAllPlayers(username + PLAYER_JOINED.name());
+        sendMessageToAllPlayers(username + PLAYER_JOINED.name(), null);
     }
 
     private void informGroupPlayerLeftGame(String username) throws IOException {
-        sendMessageToAllPlayers(username + PLAYER_LEFT.name());
+        sendMessageToAllPlayers(username + PLAYER_LEFT.name(), null);
     }
 
-    public void removePlayer(ClientInfoDto clientInfoDto) throws GameSessionNotContainsUserException, IOException {
-        if (players.contains(clientInfoDto)) {
-            informGroupPlayerLeftGame(clientInfoDto.getUsername());
-            players.remove(clientInfoDto);
+    public void removePlayer(ClientSession clientSession) throws GameSessionNotContainsUserException, IOException {
+        if (players.contains(clientSession)) {
+            informGroupPlayerLeftGame(clientSession.getUsername());
+            players.remove(clientSession);
             return;
         }
-        throw new GameSessionNotContainsUserException(clientInfoDto.getUsername());
+        throw new GameSessionNotContainsUserException(clientSession.getUsername());
     }
 
     public int getPlayersCount() {
@@ -137,19 +147,12 @@ public class GameInstanceThread extends Thread {
 
     //TODO: Server must calculate when game should be cancelled
     public boolean isFinished() {
-        return players.size() == 0 && started;
+        if (players.size() == 0 && !started) {
+            socket.close();
+            return true;
+        }
+        return false;
+
     }
 
-//    private Listener createListener() {
-//        return new Listener() {
-//            public void received(Connection connection, String message) throws IOException {
-//                String messageToSend = "service response";
-//
-//                log.info("received: " +message);
-//
-//                sendMessageToAllPlayers(messageToSend);
-//
-//            }
-//        };
-//    }
 }

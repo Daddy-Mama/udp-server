@@ -7,9 +7,7 @@ import lombok.Value;
 @ToString
 @Value
 @EqualsAndHashCode
-public class ClientInfoDto {
-//    private String ip;
-    private Integer port;
-    private String username;
-
+public class ExitClientDto {
+    ClientInfoDto clientInfoDto;
+    String gameId;
 }
