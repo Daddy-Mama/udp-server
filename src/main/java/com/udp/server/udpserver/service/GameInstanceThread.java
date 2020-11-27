@@ -37,23 +37,23 @@ public class GameInstanceThread extends Thread {
     }
 
     public void run() {
+        log.info("Server session STARTED");
+
         while (running.get()) {
             try {
-                log.info("Server session STARTED");
-
-                String messageToSend = "service response";
 
                 //read message from player
                 DatagramPacket packet = readMessageFromPlayer();
 
-                log.info("received: " + new String(packet.getData()));
-                log.info("sender info: " + packet.getAddress().getHostAddress() + ":" + packet.getPort());
+                log.info("received packet: " + new String(packet.getData()) + "sender info: " + packet.getAddress().getHostAddress() + ":" + packet.getPort());
                 if (!allowBroadCasting(packet.getAddress().getHostAddress())) {
+                    log.info("Broadcasting not allowed");
                     continue;
                 }
 
                 // send response
-                sendMessageToAllPlayers(messageToSend, packet.getAddress().getHostAddress());
+//                sendBack(packet);
+                sendMessageToAllPlayers(new String(packet.getData()), packet.getAddress().getHostAddress());
                 // sleep for a while
 
             } catch (IOException e) {
@@ -81,11 +81,17 @@ public class GameInstanceThread extends Thread {
         return receivePacket;
     }
 
-    private void sendMessageToAllPlayers(String messageToSend, String sender) throws IOException {
-        byte[] toSendData = messageToSend.getBytes();
+    private void sendBack(DatagramPacket packet) throws IOException {
+        log.info("Message sendBack!!!!!! sent to: " + packet.getAddress().getHostAddress() + ":" + packet.getPort());
 
-        players.stream()
-                .filter(player -> !player.getIp().equals(sender))
+        DatagramPacket datagramPacket = new DatagramPacket((new String(packet.getData())).concat("NE RABOTAET").getBytes(), packet.getData().length, packet.getAddress(), packet.getPort());
+        socket.send(datagramPacket);
+    }
+
+    private void sendMessageToAllPlayers(String data, String sender) throws IOException {
+        byte[] toSendData = data.getBytes();
+        players.parallelStream()
+//                .filter(player -> !player.getIp().equals(sender))
                 .forEach(player -> {
                     try {
                         DatagramPacket sendPacket =
@@ -95,6 +101,7 @@ public class GameInstanceThread extends Thread {
                                         player.getPort());
 
                         socket.send(sendPacket);
+                        log.info("Message: " + data + " sent to: " + player.getIp() + ":" + player.getPort());
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -103,7 +110,7 @@ public class GameInstanceThread extends Thread {
     }
 
     public synchronized void joinNewPlayer(ClientSession clientSession) throws UserAlreadyInGameSessionException, IOException {
-        if (!players.contains(clientSession)) {
+//        if (!players.contains(clientSession)) {
             //Session is full
             if (!isAvailable()) return;
 
@@ -116,8 +123,8 @@ public class GameInstanceThread extends Thread {
             }
 
             return;
-        }
-        throw new UserAlreadyInGameSessionException(clientSession.getUsername());
+//        }
+//        throw new UserAlreadyInGameSessionException(clientSession.getUsername());
     }
 
     public boolean isAvailable() {
