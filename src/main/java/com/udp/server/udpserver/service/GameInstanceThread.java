@@ -100,7 +100,6 @@ public class GameInstanceThread extends Thread {
                                         player.getPort());
 
                         socket.send(sendPacket);
-                        log.info("Message: " + data + " sent to: " + player.getIp() + ":" + player.getPort());
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
