@@ -7,4 +7,5 @@ import lombok.Value;
 @Builder
 public class GameDto {
     String gameId;
+    int gamePort;
 }

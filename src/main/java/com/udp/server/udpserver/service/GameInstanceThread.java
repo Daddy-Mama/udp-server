@@ -24,16 +24,15 @@ public class GameInstanceThread extends Thread {
     private boolean started = false;
     protected DatagramSocket socket;
 
-    private Integer port = 11234;
 
 
     private List<ClientSession> players = new ArrayList<>();
 
     public GameInstanceThread(String name) throws IOException {
         super(name);
-        //Todo check here port usability
-        socket = new DatagramSocket(port);
+        socket = new DatagramSocket();
         running.set(true);
+
     }
 
     public void run() {
@@ -111,18 +110,18 @@ public class GameInstanceThread extends Thread {
 
     public synchronized void joinNewPlayer(ClientSession clientSession) throws UserAlreadyInGameSessionException, IOException {
 //        if (!players.contains(clientSession)) {
-            //Session is full
-            if (!isAvailable()) return;
+        //Session is full
+        if (!isAvailable()) return;
 
-            informGroupNewPlayerJoinedGame(clientSession.getUsername());
-            players.add(clientSession);
+        informGroupNewPlayerJoinedGame(clientSession.getUsername());
+        players.add(clientSession);
 
-            //start game if it's full
-            if (players.size() == 10) {
-                started = true;
-            }
+        //start game if it's full
+        if (players.size() == 10) {
+            started = true;
+        }
 
-            return;
+        return;
 //        }
 //        throw new UserAlreadyInGameSessionException(clientSession.getUsername());
     }
@@ -162,4 +161,7 @@ public class GameInstanceThread extends Thread {
 
     }
 
+    public Integer getPort() {
+        return socket.getLocalPort();
+    }
 }

@@ -43,6 +43,7 @@ public class UdpOperationServiceImpl implements UdpOperationService {
             game.joinNewPlayer(clientSession);
             return GameDto.builder()
                     .gameId(game.getName())
+                    .gamePort(game.getPort())
                     .build();
         }
         GameInstanceThread newGame = new GameInstanceThread(String.valueOf(activeGames.size() + 1));
@@ -52,6 +53,7 @@ public class UdpOperationServiceImpl implements UdpOperationService {
 
         return GameDto.builder()
                 .gameId(newGame.getName())
+                .gamePort(newGame.getPort())
                 .build();
     }
 
